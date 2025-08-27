@@ -1,653 +1,606 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Shrine Canvas — Offline + P2P</title>
-  <style>
-    :root {
-      --bg: #0b0e12;
-      --panel: #10151c;
-      --ink: #e6edf3;
-      --muted: #93a1b3;
-      --accent: #7aa2ff;
-      --ok: #34c759;
-      --warn: #ffd60a;
-      --err: #ff453a;
-      --cell: 24px;
-      --gap: 1px;
-      --grid: 1;
-    }
-    * { box-sizing: border-box; }
-    html, body {
-      height: 100%;
-      background: radial-gradient(1000px 500px at 10% 0%, #0f1520 0%, #0b0e12 60%) no-repeat, var(--bg);
-      color: var(--ink);
-      margin: 0;
-      font: 14px/1.35 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
-    }
-    .wrap { max-width: 980px; margin: 32px auto; padding: 0 16px 32px; }
-    header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; gap: 12px; flex-wrap: wrap; }
-    h1 { margin: 0; font-size: 20px; letter-spacing: .3px; }
-    .hint { color: var(--muted); font-size: 12px; }
-    .panel {
-      background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(0,0,0,.08));
-      border: 1px solid rgba(255,255,255,.06);
-      border-radius: 12px;
-      box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.05);
-      padding: 12px;
-    }
-    .toolbar { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; margin-bottom: 12px; }
-    .palette { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-    .swatch {
-      width: 24px; height: 24px; border-radius: 6px; cursor: pointer;
-      border: 1px solid rgba(255,255,255,.15);
-      box-shadow: 0 1px 0 rgba(255,255,255,.08) inset, 0 1px 4px rgba(0,0,0,.35);
-      position: relative;
-    }
-    .swatch[data-active="1"]::after {
-      content: ""; position: absolute; inset: -3px;
-      border: 2px solid var(--accent); border-radius: 8px; pointer-events: none;
-    }
-    .controls { display: flex; gap: 8px; flex-wrap: wrap; }
-    button, .toggle, .seg {
-      background: #0e1420; color: var(--ink);
-      border: 1px solid rgba(255,255,255,.12);
-      border-radius: 10px; padding: 8px 10px; cursor: pointer;
-      box-shadow: 0 1px 0 rgba(255,255,255,.06) inset, 0 4px 14px rgba(0,0,0,.25);
-      transition: transform .02s ease, background .2s ease, border-color .2s ease;
-    }
-    button:hover, .toggle:hover, .seg:hover { background: #121a2a; border-color: rgba(255,255,255,.2); }
-    button:active, .toggle:active, .seg:active { transform: translateY(1px); }
-    .toggle { display: inline-flex; align-items: center; gap: 8px; }
-    .grid {
-      --cols: 16;
-      display: grid;
-      grid-template-columns: repeat(var(--cols), var(--cell));
-      grid-auto-rows: var(--cell);
-      gap: var(--gap);
-      width: max-content;
-      margin: 0 auto;
-      user-select: none;
-      border-radius: 12px;
-      padding: 8px;
-      background: #0b111a;
-      border: 1px solid rgba(255,255,255,.06);
-      box-shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 10px 30px rgba(0,0,0,.35);
-    }
-    .cell {
-      width: var(--cell); height: var(--cell);
-      background: transparent;
-      border: 1px solid rgba(255,255,255, calc(.06*var(--grid)));
-      border-radius: 4px;
-      box-shadow: 0 0 0 1px rgba(0,0,0,.35) inset;
-      cursor: crosshair;
-      transition: filter .05s ease;
-    }
-    .cell:hover { filter: brightness(1.15); }
-    .footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; color: var(--muted); gap: 12px; flex-wrap: wrap; }
-    .kbd { font: 600 12px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; background: #0f1625; border: 1px solid rgba(255,255,255,.14); padding: 2px 6px; border-radius: 6px; color: #cfe0ff; }
-    .badge { color: #c2d3ff; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
-    /* Modal base */
-    .modal { position: fixed; inset: 0; display: none; place-items: center; background: rgba(0,0,0,.55); padding: 16px; }
-    .modal[open] { display: grid; }
-    .sheet { width: min(820px, 100%); background: var(--panel); border: 1px solid rgba(255,255,255,.1); border-radius: 12px; padding: 16px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
-    .sheet h2 { margin: 0 0 8px; font-size: 16px; }
-    .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; flex-wrap: wrap; }
-    textarea, input[type="text"] {
-      width: 100%; background: #0e1420; color: var(--ink);
-      border: 1px solid rgba(255,255,255,.14); border-radius: 10px; padding: 10px;
-      font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-    }
-    textarea { height: 160px; resize: vertical; }
-    .segrow { display: flex; gap: 6px; margin-bottom: 10px; }
-    .seg { border-radius: 10px; padding: 6px 10px; }
-    .seg[data-active="1"] { background: #162235; border-color: rgba(122,162,255,.6); }
-    .status { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; color: #cfe0ff; }
-    .status.ok { color: var(--ok); }
-    .status.warn { color: var(--warn); }
-    .status.err { color: var(--err); }
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Stick Shrine — P2P Stick Fight</title>
+<style>
+  :root {
+    --bg: #0b0e12; --panel:#10151c; --ink:#e6edf3; --muted:#93a1b3; --accent:#7aa2ff;
+    --ok:#34c759; --warn:#ffd60a; --err:#ff453a;
+  }
+  * { box-sizing: border-box; }
+  html, body { height:100%; margin:0; background:radial-gradient(1000px 500px at 10% 0%, #0f1520 0%, #0b0e12 60%) no-repeat, var(--bg); color:var(--ink); font:14px/1.35 ui-sans-serif, system-ui, "Segoe UI", Roboto, Arial; }
+  .wrap { max-width: 1000px; margin: 20px auto; padding: 0 16px 24px; }
+  header { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  h1 { font-size:20px; margin:0; letter-spacing:.2px; }
+  .hint { color:var(--muted); font-size:12px; }
+  .panel { margin-top:10px; background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(0,0,0,.08)); border:1px solid rgba(255,255,255,.06); border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.05); padding:12px; }
+  .toolbar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  button, .toggle, .seg {
+    background:#0e1420; color:var(--ink); border:1px solid rgba(255,255,255,.12); border-radius:10px; padding:8px 10px; cursor:pointer;
+    box-shadow:0 1px 0 rgba(255,255,255,.06) inset, 0 4px 14px rgba(0,0,0,.25);
+  }
+  button:hover, .toggle:hover, .seg:hover { background:#121a2a; border-color:rgba(255,255,255,.2); }
+  .toggle { display:inline-flex; align-items:center; gap:6px; }
+  .segrow { display:flex; gap:6px; flex-wrap:wrap; }
+  .seg[data-active="1"] { background:#162235; border-color:rgba(122,162,255,.6); }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .flex { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  .kbd { font:600 12px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono"; background:#0f1625; border:1px solid rgba(255,255,255,.14); padding:2px 6px; border-radius:6px; color:#cfe0ff; }
+  .status { font:12px ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono"; color:#cfe0ff; }
+  .status.ok { color:var(--ok); } .status.warn { color:var(--warn); } .status.err { color:var(--err); }
+  canvas { display:block; margin:10px auto 0; background:linear-gradient(#1c2431, #151b26); border:1px solid rgba(255,255,255,.06); border-radius:12px; box-shadow:inset 0 1px 0 rgba(255,255,255,.04), 0 10px 30px rgba(0,0,0,.35); }
+  .footer { display:flex; justify-content:space-between; align-items:center; gap:12px; color:var(--muted); flex-wrap:wrap; margin-top:10px; }
+  /* Modal */
+  .modal { position:fixed; inset:0; display:none; place-items:center; background:rgba(0,0,0,.55); padding:16px; }
+  .modal[open] { display:grid; }
+  .sheet { width:min(820px,100%); background:var(--panel); border:1px solid rgba(255,255,255,.1); border-radius:12px; padding:16px; box-shadow:0 20px 60px rgba(0,0,0,.5); }
+  .sheet h2 { margin:0 0 8px; font-size:16px; }
+  textarea, input[type="text"] {
+    width:100%; background:#0e1420; color:var(--ink); border:1px solid rgba(255,255,255,.14); border-radius:10px; padding:10px;
+    font:12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono";
+  }
+  textarea { height:160px; resize:vertical; }
+</style>
 </head>
 <body>
   <div class="wrap">
     <header>
-      <h1>Shrine Canvas — Offline + P2P</h1>
-      <div class="hint">Static friendly. Works offline. Optional LAN-only P2P.</div>
+      <h1>Stick Shrine — P2P Stick Fight</h1>
+      <div class="hint">Local 2‑player or peer‑to‑peer. Static‑host friendly. LAN‑only option.</div>
     </header>
 
     <div class="panel">
       <div class="toolbar">
-        <div class="palette" id="palette" title="Pick a color (keys 1–9, 0)">
-          <!-- swatches injected by JS -->
-        </div>
-        <div class="controls">
+        <div class="row">
           <button id="mpBtn" title="Peer-to-peer multiplayer via WebRTC">Multiplayer</button>
-          <button id="clearBtn" title="Clear the canvas (C)">Clear</button>
-          <button id="exportBtn" title="Export a compact string (E)">Export</button>
-          <button id="importBtn" title="Import from a string (I)">Import</button>
-          <button id="randomBtn" title="Sprinkle current color randomly (R)">Randomize</button>
-          <label class="toggle" title="Toggle grid lines (G)">
-            <input type="checkbox" id="gridToggle" />
-            <span>Grid</span>
+          <span id="p2pBadge" class="status">P2P: disconnected</span>
+        </div>
+        <div class="row">
+          <button id="resetBtn" title="Restart round">Reset</button>
+          <label class="toggle" title="Show debug overlay">
+            <input type="checkbox" id="dbgToggle" />
+            <span>Debug</span>
           </label>
         </div>
       </div>
 
-      <div class="grid" id="grid" aria-label="Pixel grid" role="application">
-        <!-- cells injected by JS -->
-      </div>
+      <canvas id="cv" width="960" height="540" aria-label="Stick fight arena"></canvas>
 
       <div class="footer">
         <div>
-          <span class="kbd">Drag</span> paint • <span class="kbd">Right-click</span> erase •
-          <span class="kbd">1–9,0</span> colors • <span class="kbd">C</span> clear • <span class="kbd">E</span> export • <span class="kbd">I</span> import • <span class="kbd">G</span> grid • <span class="kbd">R</span> random
+          <span class="kbd">P1</span> A/D move, W jump, J punch •
+          <span class="kbd">P2</span> ←/→ move, ↑ jump, ; punch •
+          <span class="kbd">R</span> reset
         </div>
-        <div class="badge" id="p2pStatus">P2P: disconnected</div>
+        <div class="hint">Host is authoritative when connected.</div>
       </div>
     </div>
   </div>
 
-  <!-- Modal: Export/Import -->
-  <div class="modal" id="modal" aria-hidden="true">
-    <div class="sheet">
-      <h2 id="modalTitle">Export</h2>
-      <textarea id="modalText" spellcheck="false"></textarea>
-      <div class="row">
-        <button id="copyBtn" title="Copy to clipboard">Copy</button>
-        <button id="closeBtn" title="Close">Close</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Modal: Multiplayer (manual signaling, no server) -->
+  <!-- P2P Modal -->
   <div class="modal" id="p2pModal" aria-hidden="true">
     <div class="sheet">
-      <h2>Multiplayer — WebRTC Peer-to-Peer</h2>
-      <div class="segrow">
-        <button class="seg" id="tabHost" data-active="1">Host</button>
-        <button class="seg" id="tabJoin" data-active="0">Join</button>
-        <label class="toggle" title="LAN-only mode uses no STUN (same-network best). Uncheck to allow public STUN.">
-          <input type="checkbox" id="lanOnly" checked />
-          <span>LAN-only</span>
-        </label>
-        <span class="status" id="p2pState">idle</span>
+      <h2>Multiplayer — WebRTC (manual signaling)</h2>
+      <div class="row" style="justify-content:space-between">
+        <div class="segrow">
+          <button id="tabHost" class="seg" data-active="1">Host</button>
+          <button id="tabJoin" class="seg" data-active="0">Join</button>
+        </div>
+        <div class="row">
+          <label class="toggle" title="No STUN servers (best for same LAN). Uncheck to allow public STUN for internet peers.">
+            <input type="checkbox" id="lanOnly" checked />
+            <span>LAN‑only</span>
+          </label>
+          <span id="p2pState" class="status">idle</span>
+        </div>
       </div>
 
       <div id="hostPane">
-        <p class="hint">1) Create an offer. 2) Copy it to your peer. 3) Paste their answer below.</p>
+        <p class="hint">1) Create offer. 2) Send it to your peer. 3) Paste their answer below.</p>
         <div class="row" style="justify-content:flex-start">
           <button id="hostCreate">Create Offer</button>
           <button id="hostCopy">Copy Offer</button>
           <button id="hostReset">Reset</button>
         </div>
-        <label for="hostOffer" class="hint">Offer (share this):</label>
-        <textarea id="hostOffer" spellcheck="false" placeholder="Host offer appears here"></textarea>
-
-        <label for="hostAnswer" class="hint">Paste answer from peer:</label>
-        <textarea id="hostAnswer" spellcheck="false" placeholder="Paste peer answer here"></textarea>
-
-        <div class="row">
+        <label class="hint">Offer (share this):</label>
+        <textarea id="hostOffer" spellcheck="false" placeholder="Host offer will appear here"></textarea>
+        <label class="hint">Paste peer answer:</label>
+        <textarea id="hostAnswer" spellcheck="false" placeholder="Paste answer here"></textarea>
+        <div class="row" style="justify-content:flex-end">
           <button id="hostAccept">Accept Answer</button>
           <button id="p2pClose">Close</button>
         </div>
       </div>
 
       <div id="joinPane" style="display:none">
-        <p class="hint">1) Paste the host’s offer. 2) Create answer. 3) Send back the answer.</p>
-        <label for="joinOffer" class="hint">Paste host offer:</label>
-        <textarea id="joinOffer" spellcheck="false" placeholder="Paste host offer here"></textarea>
-
+        <p class="hint">1) Paste host offer. 2) Create answer. 3) Send answer back.</p>
+        <label class="hint">Paste host offer:</label>
+        <textarea id="joinOffer" spellcheck="false" placeholder="Paste offer here"></textarea>
         <div class="row" style="justify-content:flex-start">
           <button id="joinAccept">Accept Offer & Create Answer</button>
           <button id="joinCopy">Copy Answer</button>
           <button id="joinReset">Reset</button>
         </div>
-
-        <label for="joinAnswer" class="hint">Answer (share this):</label>
-        <textarea id="joinAnswer" spellcheck="false" placeholder="Your answer appears here"></textarea>
-
-        <div class="row">
+        <label class="hint">Answer (share this):</label>
+        <textarea id="joinAnswer" spellcheck="false" placeholder="Your answer will appear here"></textarea>
+        <div class="row" style="justify-content:flex-end">
           <button id="p2pClose2">Close</button>
         </div>
       </div>
     </div>
   </div>
 
-  <script>
-    (() => {
-      // ===== Config =====
-      const SIZE = 16;                 // grid size
-      const KEY = "shrineCanvas16.v2"; // localStorage key
-      const EMPTY = 0;                 // index 0 = transparent
-      const PALETTE = [
-        "transparent","#ffffff","#000000","#ff3b30","#ff9500","#ffd60a",
-        "#34c759","#30d0ff","#0a84ff","#7a79ff","#bf5af2","#ff2d55",
-        "#8e8e93","#5ac8fa","#64d2ff","#ffcc00"
-      ];
+<script>
+(() => {
+  // ===== Game config =====
+  const W = 960, H = 540;
+  const GROUND_Y = H - 60;
+  const GRAV = 0.9, FRICTION = 0.85, AIR_FRICTION = 0.98;
+  const MOVE = 5.0, JUMP = 16.5;
+  const PUNCH_CD = 350;   // ms
+  const PUNCH_LEN = 120;  // ms
+  const PUNCH_RANGE = 46; // px from torso
+  const PUNCH_DMG = 22;
+  const MAX_HP = 100;
+  const RESPAWN_MS = 1500;
 
-      // ===== DOM =====
-      const gridEl = document.getElementById("grid");
-      const paletteEl = document.getElementById("palette");
-      const clearBtn = document.getElementById("clearBtn");
-      const exportBtn = document.getElementById("exportBtn");
-      const importBtn = document.getElementById("importBtn");
-      const randomBtn = document.getElementById("randomBtn");
-      const gridToggle = document.getElementById("gridToggle");
-      const modal = document.getElementById("modal");
-      const modalTitle = document.getElementById("modalTitle");
-      const modalText = document.getElementById("modalText");
-      const copyBtn = document.getElementById("copyBtn");
-      const closeBtn = document.getElementById("closeBtn");
-      const mpBtn = document.getElementById("mpBtn");
-      const p2pStatus = document.getElementById("p2pStatus");
+  // ===== Canvas =====
+  const cv = document.getElementById("cv");
+  const ctx = cv.getContext("2d");
 
-      // P2P modal
-      const p2pModal = document.getElementById("p2pModal");
-      const tabHost = document.getElementById("tabHost");
-      const tabJoin = document.getElementById("tabJoin");
-      const hostPane = document.getElementById("hostPane");
-      const joinPane = document.getElementById("joinPane");
-      const lanOnly = document.getElementById("lanOnly");
-      const p2pState = document.getElementById("p2pState");
+  // ===== UI =====
+  const resetBtn = document.getElementById("resetBtn");
+  const dbgToggle = document.getElementById("dbgToggle");
+  const mpBtn = document.getElementById("mpBtn");
+  const p2pBadge = document.getElementById("p2pBadge");
+  const p2pModal = document.getElementById("p2pModal");
+  const p2pState = document.getElementById("p2pState");
+  const tabHost = document.getElementById("tabHost");
+  const tabJoin = document.getElementById("tabJoin");
+  const hostPane = document.getElementById("hostPane");
+  const joinPane = document.getElementById("joinPane");
+  const lanOnly = document.getElementById("lanOnly");
+  const hostCreate = document.getElementById("hostCreate");
+  const hostCopy = document.getElementById("hostCopy");
+  const hostReset = document.getElementById("hostReset");
+  const hostOffer = document.getElementById("hostOffer");
+  const hostAnswer = document.getElementById("hostAnswer");
+  const hostAccept = document.getElementById("hostAccept");
+  const joinOffer = document.getElementById("joinOffer");
+  const joinAccept = document.getElementById("joinAccept");
+  const joinCopy = document.getElementById("joinCopy");
+  const joinReset = document.getElementById("joinReset");
+  const joinAnswer = document.getElementById("joinAnswer");
+  const p2pClose = document.getElementById("p2pClose");
+  const p2pClose2 = document.getElementById("p2pClose2");
 
-      const hostCreate = document.getElementById("hostCreate");
-      const hostCopy = document.getElementById("hostCopy");
-      const hostReset = document.getElementById("hostReset");
-      const hostOffer = document.getElementById("hostOffer");
-      const hostAnswer = document.getElementById("hostAnswer");
-      const hostAccept = document.getElementById("hostAccept");
-      const p2pClose = document.getElementById("p2pClose");
-      const p2pClose2 = document.getElementById("p2pClose2");
+  // ===== Game state =====
+  const makePlayer = (x) => ({
+    x, y: GROUND_Y, vx: 0, vy: 0,
+    facing: 1, // 1 right, -1 left
+    onGround: true,
+    hp: MAX_HP,
+    punchT: 0, // time left of punch anim (ms)
+    cd: 0,     // cooldown ms
+    dead: false,
+    respawnAt: 0,
+    score: 0,
+  });
+  let P1 = makePlayer(W*0.3), P2 = makePlayer(W*0.7);
+  P2.facing = -1;
 
-      const joinOffer = document.getElementById("joinOffer");
-      const joinAccept = document.getElementById("joinAccept");
-      const joinAnswer = document.getElementById("joinAnswer");
-      const joinCopy = document.getElementById("joinCopy");
-      const joinReset = document.getElementById("joinReset");
+  const input = {
+    // local keys for P1 and P2 (always active for couch play)
+    p1: { left:false, right:false, jump:false, punch:false },
+    p2: { left:false, right:false, jump:false, punch:false }
+  };
+  const remoteInput = { left:false, right:false, jump:false, punch:false };
 
-      // ===== State =====
-      let data = new Array(SIZE * SIZE).fill(EMPTY);
-      let current = 8; // default color (blue)
-      let drawing = false;
-      let eraseMode = false;
+  // Networking role: null (offline), "host", "join"
+  let role = null;
+  let pc = null, dc = null;
+  let lastNetStateSent = 0;
 
-      // P2P state
-      let pc = null;    // RTCPeerConnection
-      let dc = null;    // RTCDataChannel
-      let role = null;  // "host" or "join"
-      let remoteApplying = false;
+  // ===== Helpers =====
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 
-      // ===== Init =====
-      gridEl.style.setProperty("--cols", SIZE);
-      buildPalette();
-      buildGrid();
-      load();
-      updateActiveSwatch();
-      gridToggle.checked = true; // grid on by default
+  // ===== Physics & combat =====
+  function applyInput(pl, inp) {
+    if (pl.dead) return;
+    // horizontal
+    if (inp.left && !inp.right) { pl.vx -= pl.onGround ? MOVE : MOVE*0.6; pl.facing = -1; }
+    else if (inp.right && !inp.left) { pl.vx += pl.onGround ? MOVE : MOVE*0.6; pl.facing = 1; }
+    // jump (edge-triggered handled outside)
+    // punch
+    // (edge-triggered handled outside)
+  }
 
-      // ===== Palette =====
-      function buildPalette() {
-        paletteEl.innerHTML = "";
-        for (let i = 0; i < PALETTE.length; i++) {
-          const sw = document.createElement("button");
-          sw.className = "swatch";
-          sw.style.background = PALETTE[i];
-          sw.title = i.toString(16).toUpperCase();
-          sw.dataset.index = i;
-          sw.addEventListener("click", () => { current = i; updateActiveSwatch(); });
-          paletteEl.appendChild(sw);
+  function integrate(pl, dt) {
+    // friction
+    pl.vx *= pl.onGround ? FRICTION : AIR_FRICTION;
+    // gravity
+    pl.vy += GRAV;
+    // move
+    pl.x += pl.vx * dt/16.7;
+    pl.y += pl.vy * dt/16.7;
+
+    // ground collide
+    if (pl.y >= GROUND_Y) {
+      pl.y = GROUND_Y;
+      pl.vy = 0;
+      pl.onGround = true;
+    } else {
+      pl.onGround = false;
+    }
+
+    // walls
+    if (pl.x < 40) { pl.x = 40; pl.vx = 0; }
+    if (pl.x > W-40) { pl.x = W-40; pl.vx = 0; }
+
+    // timers
+    if (pl.punchT > 0) pl.punchT -= dt;
+    if (pl.cd > 0) pl.cd -= dt;
+  }
+
+  function tryJump(pl, wasDown, isDown) {
+    if (!wasDown && isDown && pl.onGround && !pl.dead) {
+      pl.vy = -JUMP;
+      pl.onGround = false;
+    }
+  }
+
+  function tryPunch(att, def, wasDown, isDown, now) {
+    if (!att.dead && !wasDown && isDown && att.cd <= 0) {
+      att.punchT = PUNCH_LEN;
+      att.cd = PUNCH_CD;
+      // hitbox: small segment in facing dir
+      const hx = att.x + att.facing * (PUNCH_RANGE);
+      const hy = att.y - 30; // torso height
+      const dx = def.x - hx;
+      const dy = (def.y - 30) - hy;
+      const dist = Math.hypot(dx, dy);
+      if (dist < 40) {
+        def.hp -= PUNCH_DMG;
+        def.vx += att.facing * 8;
+        def.vy = -6;
+        if (def.hp <= 0 && !def.dead) {
+          def.dead = true;
+          def.respawnAt = now + RESPAWN_MS;
+          att.score += 1;
         }
       }
-      function updateActiveSwatch() {
-        for (const el of paletteEl.children) el.dataset.active = "0";
-        const active = paletteEl.children[current];
-        if (active) active.dataset.active = "1";
-      }
+    }
+  }
 
-      // ===== Grid =====
-      function buildGrid() {
-        gridEl.innerHTML = "";
-        gridEl.addEventListener("contextmenu", e => e.preventDefault());
-        for (let i = 0; i < data.length; i++) {
-          const cell = document.createElement("div");
-          cell.className = "cell";
-          cell.dataset.i = i;
-          paintCellEl(cell, data[i]);
-          cell.addEventListener("mousedown", onDown);
-          cell.addEventListener("mouseenter", onEnter);
-          cell.addEventListener("mouseup", onUp);
-          gridEl.appendChild(cell);
-        }
-        window.addEventListener("mouseup", () => { drawing = false; });
-      }
-      function onDown(e) {
-        const i = +this.dataset.i;
-        drawing = true;
-        eraseMode = (e.button === 2) || (current === EMPTY);
-        const idx = eraseMode ? EMPTY : current;
-        setAt(i, idx, true, false);
-      }
-      function onEnter() {
-        if (!drawing) return;
-        const i = +this.dataset.i;
-        const idx = eraseMode ? EMPTY : current;
-        setAt(i, idx, true, false);
-      }
-      function onUp() { drawing = false; }
+  function respawnIfReady(pl, now) {
+    if (pl.dead && now >= pl.respawnAt) {
+      Object.assign(pl, makePlayer(pl === P1 ? W*0.3 : W*0.7));
+      pl.facing = (pl === P1) ? 1 : -1;
+    }
+  }
 
-      function paintCellEl(el, idx) { el.style.background = PALETTE[idx]; }
+  // ===== Rendering =====
+  function draw() {
+    // background
+    ctx.clearRect(0,0,W,H);
+    // arena floor
+    ctx.fillStyle = "#0f1520";
+    ctx.fillRect(0, GROUND_Y+20, W, H-(GROUND_Y+20));
+    ctx.fillStyle = "#121a2a";
+    ctx.fillRect(0, GROUND_Y, W, 20);
 
-      // ===== Data ops & persistence =====
-      function setAt(i, idx, repaint = false, fromRemote = false) {
-        data[i] = idx;
-        if (repaint) paintCellEl(gridEl.children[i], idx);
-        saveThrottled();
-        if (!fromRemote) p2pSend({ t: "s", i, v: idx });
-      }
+    drawPlayer(P1, "#7aa2ff");
+    drawPlayer(P2, "#ff9f7a");
 
-      let saveTimer = null;
-      function saveThrottled() {
-        if (saveTimer) return;
-        saveTimer = setTimeout(() => { saveTimer = null; save(); }, 150);
-      }
-      function save() {
-        try {
-          const payload = { size: SIZE, scheme: "hex16", content: encode(data) };
-          localStorage.setItem(KEY, JSON.stringify(payload));
-        } catch {}
-      }
-      function load() {
-        try {
-          const raw = localStorage.getItem(KEY);
-          if (!raw) return;
-          const payload = JSON.parse(raw);
-          if (payload.size !== SIZE || payload.scheme !== "hex16") return;
-          const arr = decode(payload.content);
-          if (arr && arr.length === data.length) {
-            data = arr;
-            for (let i = 0; i < data.length; i++) paintCellEl(gridEl.children[i], data[i]);
-          }
-        } catch {}
-      }
+    // HUD
+    drawHUD();
+  }
 
-      // Encode/decode 16x16 as hex string
-      function encode(arr) {
-        let out = "";
-        for (let i = 0; i < arr.length; i++) out += arr[i].toString(16);
-        return out;
-      }
-      function decode(str) {
-        const s = (str || "").trim().toLowerCase();
-        if (!/^[0-9a-f]+$/.test(s)) return null;
-        if (s.length !== SIZE * SIZE) return null;
-        const out = new Array(s.length);
-        for (let i = 0; i < s.length; i++) out[i] = parseInt(s[i], 16);
-        return out;
-      }
+  function drawPlayer(p, color) {
+    // shadow
+    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    ctx.beginPath();
+    ctx.ellipse(p.x, GROUND_Y+10, 22, 8, 0, 0, Math.PI*2);
+    ctx.fill();
 
-      // ===== Buttons =====
-      clearBtn.addEventListener("click", () => {
-        if (!confirm("Clear the canvas?")) return;
-        data.fill(EMPTY);
-        for (let i = 0; i < data.length; i++) paintCellEl(gridEl.children[i], EMPTY);
-        save();
-        p2pSendFull();
-      });
-      exportBtn.addEventListener("click", () => {
-        modalTitle.textContent = "Export — Share this string";
-        modalText.value = encode(data);
-        openModal();
-        modalText.select();
-      });
-      importBtn.addEventListener("click", () => {
-        modalTitle.textContent = "Import — Paste string below";
-        modalText.value = "";
-        openModal();
-        modalText.focus();
-      });
-      randomBtn.addEventListener("click", () => {
-        const chance = 0.12;
-        for (let i = 0; i < data.length; i++) {
-          const v = Math.random() < chance ? current : EMPTY;
-          data[i] = v;
-          paintCellEl(gridEl.children[i], v);
-        }
-        save();
-        p2pSendFull();
-      });
-      gridToggle.addEventListener("change", () => {
-        const on = gridToggle.checked ? 1 : 0;
-        document.documentElement.style.setProperty("--grid", on);
-      });
+    // stick figure
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 4;
+    ctx.lineCap = "round";
+    // torso
+    const headY = p.y - 60;
+    const torsoY = p.y - 20;
+    ctx.beginPath();
+    ctx.moveTo(p.x, headY+14);
+    ctx.lineTo(p.x, torsoY);
+    ctx.stroke();
+    // head
+    ctx.beginPath();
+    ctx.arc(p.x, headY, 14, 0, Math.PI*2);
+    ctx.stroke();
+    // legs
+    ctx.beginPath();
+    ctx.moveTo(p.x, torsoY);
+    ctx.lineTo(p.x - 14, p.y);
+    ctx.moveTo(p.x, torsoY);
+    ctx.lineTo(p.x + 14, p.y);
+    ctx.stroke();
+    // arms
+    const armLen = 26;
+    const ang = p.punchT > 0 ? (p.facing === 1 ? 0.0 : Math.PI) : (p.facing === 1 ? -0.4 : Math.PI+0.4);
+    const ax = p.x + Math.cos(ang) * armLen;
+    const ay = (p.y - 40) + Math.sin(ang) * armLen;
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y - 40);
+    ctx.lineTo(ax, ay);
+    ctx.stroke();
 
-      // Export/Import modal
-      function openModal() { modal.setAttribute("open",""); modal.setAttribute("aria-hidden","false"); }
-      function closeModal() { modal.removeAttribute("open"); modal.setAttribute("aria-hidden","true"); }
-      copyBtn.addEventListener("click", async () => {
-        try {
-          await navigator.clipboard.writeText(modalText.value);
-          copyBtn.textContent = "Copied";
-          setTimeout(() => (copyBtn.textContent = "Copy"), 1000);
-        } catch {
-          modalText.select(); alert("Select the text and press Ctrl+C to copy.");
-        }
-      });
-      closeBtn.addEventListener("click", () => {
-        if (modalTitle.textContent.startsWith("Import")) {
-          const arr = decode(modalText.value);
-          if (!arr) { closeModal(); return alert("Invalid string. Expecting " + (SIZE * SIZE) + " hex digits."); }
-          data = arr;
-          for (let i = 0; i < data.length; i++) paintCellEl(gridEl.children[i], data[i]);
-          save();
-          p2pSendFull();
-        }
-        closeModal();
-      });
-      modal.addEventListener("click", (e) => { if (e.target === modal) closeBtn.click(); });
+    if (dbgToggle.checked) {
+      ctx.fillStyle = "#cfe0ff";
+      ctx.font = "12px ui-monospace";
+      ctx.fillText(`x:${p.x.toFixed(1)} y:${p.y.toFixed(1)} vx:${p.vx.toFixed(2)} vy:${p.vy.toFixed(2)}`, p.x-40, p.y-80);
+    }
+  }
 
-      // Keyboard
-      window.addEventListener("keydown", (e) => {
-        if (e.target.matches("textarea, input")) return;
-        const k = e.key.toLowerCase();
-        if (k === "c") { clearBtn.click(); e.preventDefault(); }
-        else if (k === "e") { exportBtn.click(); e.preventDefault(); }
-        else if (k === "i") { importBtn.click(); e.preventDefault(); }
-        else if (k === "g") { gridToggle.click(); e.preventDefault(); }
-        else if (k === "r") { randomBtn.click(); e.preventDefault(); }
-        else if ("1234567890".includes(e.key)) {
-          const map = { "0": 10 };
-          const idx = map[e.key] ?? parseInt(e.key, 10);
-          if (idx >= 0 && idx < PALETTE.length) { current = idx; updateActiveSwatch(); }
-        }
-      });
+  function drawHUD() {
+    // HP bars
+    const bar = (x, y, hp, color, label, score) => {
+      ctx.fillStyle = "rgba(255,255,255,0.08)";
+      ctx.fillRect(x, y, 320, 14);
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y, 320 * clamp(hp/MAX_HP, 0, 1), 14);
+      ctx.strokeStyle = "rgba(255,255,255,0.2)";
+      ctx.strokeRect(x, y, 320, 14);
+      ctx.fillStyle = "#cfe0ff";
+      ctx.font = "12px ui-monospace";
+      ctx.fillText(`${label} HP:${Math.max(0, hp)}  KOs:${score}`, x, y-6);
+    };
+    bar(20, 24, P1.hp, "#7aa2ff", "P1", P1.score);
+    bar(W-340, 24, P2.hp, "#ff9f7a", "P2", P2.score);
 
-      // Focus outlines for keyboard users
-      let usingMouse = false;
-      window.addEventListener("mousedown", () => (usingMouse = true));
-      window.addEventListener("keydown", () => (usingMouse = false));
-      document.body.addEventListener("focusin", (e) => { if (usingMouse) e.target.style.outline = "none"; else e.target.style.outline = "2px solid var(--accent)"; });
-      document.body.addEventListener("focusout", (e) => (e.target.style.outline = "none"));
+    if (role) {
+      ctx.fillStyle = "#93a1b3";
+      ctx.font = "12px ui-monospace";
+      ctx.fillText(`Net: ${role}`, 20, 48);
+    }
+  }
 
-      // ===== P2P Multiplayer (manual signaling, static-friendly) =====
-      mpBtn.addEventListener("click", () => openP2PModal());
-      p2pClose.addEventListener("click", () => closeP2PModal());
-      p2pClose2.addEventListener("click", () => closeP2PModal());
+  // ===== Game loop =====
+  let last = performance.now();
+  let prevJump = { p1:false, p2:false };
+  let prevPunch = { p1:false, p2:false };
 
-      tabHost.addEventListener("click", () => switchTab("host"));
-      tabJoin.addEventListener("click", () => switchTab("join"));
+  function step(now) {
+    const dt = clamp(now - last, 0, 50);
+    last = now;
 
-      hostCreate.addEventListener("click", async () => {
-        resetP2P();
-        role = "host";
-        try {
-          pc = buildPC();
-          dc = pc.createDataChannel("grid", { ordered: true });
-          attachDC(dc);
-          setState("creating offer…");
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          await waitIceGatheringComplete(pc);
-          hostOffer.value = JSON.stringify(pc.localDescription);
-          setState("share the offer with your peer");
-        } catch (e) {
-          setState("error creating offer", true);
-          console.error(e);
-        }
-      });
+    // inputs: local for couch play always active
+    const p1In = role === "join" ? remoteInput : input.p1; // join uses host-fed input for P1 if host is controlling P1
+    const p2In = role === "host" ? remoteInput : input.p2; // host uses remote for P2 when connected
 
-      hostCopy.addEventListener("click", async () => {
-        try { await navigator.clipboard.writeText(hostOffer.value || ""); setState("offer copied"); } catch { alert("Copy failed — select and Ctrl+C"); }
-      });
+    // apply inputs
+    applyInput(P1, p1In);
+    applyInput(P2, p2In);
 
-      hostAccept.addEventListener("click", async () => {
-        try {
-          const ans = JSON.parse((hostAnswer.value || "").trim());
-          await pc.setRemoteDescription(ans);
-          setState("connected? waiting for datachannel…");
-        } catch (e) {
-          setState("invalid answer", true);
-        }
-      });
+    // edge-triggered actions
+    tryJump(P1, prevJump.p1, p1In.jump);
+    tryJump(P2, prevJump.p2, p2In.jump);
+    tryPunch(P1, P2, prevPunch.p1, p1In.punch, now);
+    tryPunch(P2, P1, prevPunch.p2, p2In.punch, now);
+    prevJump.p1 = p1In.jump; prevJump.p2 = p2In.jump;
+    prevPunch.p1 = p1In.punch; prevPunch.p2 = p2In.punch;
 
-      hostReset.addEventListener("click", () => {
-        resetP2P();
-        hostOffer.value = ""; hostAnswer.value = ""; setState("idle");
-      });
+    // integrate physics
+    integrate(P1, dt);
+    integrate(P2, dt);
 
-      joinAccept.addEventListener("click", async () => {
-        resetP2P();
-        role = "join";
-        try {
-          pc = buildPC();
-          pc.ondatachannel = (ev) => { dc = ev.channel; attachDC(dc); };
-          setState("creating answer…");
-          const off = JSON.parse((joinOffer.value || "").trim());
-          await pc.setRemoteDescription(off);
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          await waitIceGatheringComplete(pc);
-          joinAnswer.value = JSON.stringify(pc.localDescription);
-          setState("send answer back to host");
-        } catch (e) {
-          setState("invalid offer", true);
-        }
-      });
+    // respawn
+    respawnIfReady(P1, now);
+    respawnIfReady(P2, now);
 
-      joinCopy.addEventListener("click", async () => {
-        try { await navigator.clipboard.writeText(joinAnswer.value || ""); setState("answer copied"); } catch { alert("Copy failed — select and Ctrl+C"); }
-      });
-
-      joinReset.addEventListener("click", () => {
-        resetP2P();
-        joinOffer.value = ""; joinAnswer.value = ""; setState("idle");
-      });
-
-      function openP2PModal() { p2pModal.setAttribute("open",""); p2pModal.setAttribute("aria-hidden","false"); }
-      function closeP2PModal() { p2pModal.removeAttribute("open"); p2pModal.setAttribute("aria-hidden","true"); }
-
-      function switchTab(which) {
-        const isHost = which === "host";
-        hostPane.style.display = isHost ? "" : "none";
-        joinPane.style.display = isHost ? "none" : "";
-        tabHost.dataset.active = isHost ? "1" : "0";
-        tabJoin.dataset.active = isHost ? "0" : "1";
-      }
-
-      function buildPC() {
-        const useLan = !!lanOnly.checked;
-        const cfg = useLan ? { iceServers: [] } : { iceServers: [
-          { urls: ["stun:stun.l.google.com:19302", "stun:global.stun.twilio.com:3478"] }
-        ]};
-        const peer = new RTCPeerConnection(cfg);
-        peer.onconnectionstatechange = () => {
-          const cs = peer.connectionState;
-          p2pStatus.textContent = "P2P: " + cs;
-          if (cs === "connected") setState("connected", false, true);
-          else if (cs === "failed") setState("connection failed", true);
-        };
-        peer.oniceconnectionstatechange = () => {
-          // reflect ICE state briefly
-          const ics = peer.iceConnectionState;
-          if (ics && ics !== "connected" && ics !== "completed") setState("ice: " + ics);
-        };
-        return peer;
-      }
-
-      function attachDC(channel) {
-        channel.binaryType = "arraybuffer";
-        channel.onopen = () => {
-          setState("datachannel open", false, true);
-          p2pStatus.textContent = "P2P: connected";
-          // Host pushes full state on connect
-          if (role === "host") p2pSendFull();
-        };
-        channel.onclose = () => { setState("datachannel closed"); p2pStatus.textContent = "P2P: disconnected"; };
-        channel.onerror = (e) => { console.error("dc error", e); setState("channel error", true); };
-        channel.onmessage = (evt) => {
-          try {
-            const msg = JSON.parse(typeof evt.data === "string" ? evt.data : new TextDecoder().decode(evt.data));
-            handleMsg(msg);
-          } catch (e) {
-            console.warn("bad message", e);
-          }
-        };
-      }
-
-      function resetP2P() {
-        if (dc) { try { dc.close(); } catch {} dc = null; }
-        if (pc) { try { pc.close(); } catch {} pc = null; }
-        role = null;
-        p2pStatus.textContent = "P2P: disconnected";
-      }
-
-      function setState(text, isErr = false, isOk = false) {
-        p2pState.textContent = text;
-        p2pState.className = "status" + (isErr ? " err" : isOk ? " ok" : "");
-      }
-
-      function waitIceGatheringComplete(peer) {
-        if (peer.iceGatheringState === "complete") return Promise.resolve();
-        return new Promise(resolve => {
-          const check = () => {
-            if (peer.iceGatheringState === "complete") {
-              peer.removeEventListener("icegatheringstatechange", check);
-              resolve();
-            }
-          };
-          peer.addEventListener("icegatheringstatechange", check);
+    // net authority: host sends state snapshots
+    if (role === "host" && dc && dc.readyState === "open") {
+      if (now - lastNetStateSent > 50) {
+        lastNetStateSent = now;
+        p2pSend({
+          t:"state",
+          p1: packPlayer(P1),
+          p2: packPlayer(P2)
         });
       }
+    }
 
-      function p2pSend(obj) {
-        if (!dc || dc.readyState !== "open") return;
-        try { dc.send(JSON.stringify(obj)); } catch {}
-      }
-      function p2pSendFull() {
-        p2pSend({ t: "f", s: encode(data), size: SIZE, scheme: "hex16" });
-      }
+    draw();
+    requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
 
-      function handleMsg(msg) {
-        if (!msg || typeof msg !== "object") return;
-        if (msg.t === "s") {
-          const i = msg.i|0, v = msg.v|0;
-          if (i >= 0 && i < data.length && v >= 0 && v < PALETTE.length) {
-            remoteApplying = true;
-            setAt(i, v, true, true);
-            remoteApplying = false;
-          }
-        } else if (msg.t === "f" && typeof msg.s === "string") {
-          const arr = decode(msg.s);
-          if (arr && arr.length === data.length) {
-            remoteApplying = true;
-            data = arr;
-            for (let i = 0; i < data.length; i++) paintCellEl(gridEl.children[i], data[i]);
-            save();
-            remoteApplying = false;
-          }
-        }
+  function packPlayer(p) {
+    return { x:p.x, y:p.y, vx:p.vx, vy:p.vy, f:p.facing, g:p.onGround?1:0, hp:p.hp, pt:Math.max(0, p.punchT|0), cd:Math.max(0, p.cd|0), d:p.dead?1:0, rs:p.respawnAt|0, sc:p.score|0 };
+  }
+  function unpackInto(dst, src) {
+    if (!src) return;
+    dst.x = src.x; dst.y = src.y; dst.vx = src.vx; dst.vy = src.vy;
+    dst.facing = src.f; dst.onGround = !!src.g; dst.hp = src.hp;
+    dst.punchT = src.pt; dst.cd = src.cd; dst.dead = !!src.d; dst.respawnAt = src.rs; dst.score = src.sc;
+  }
+
+  // ===== Controls =====
+  const keyMapDown = {
+    // P1
+    "a":"p1.left", "d":"p1.right", "w":"p1.jump", "j":"p1.punch",
+    // P2
+    "arrowleft":"p2.left", "arrowright":"p2.right", "arrowup":"p2.jump", ";":"p2.punch"
+  };
+  const keyMapUp = keyMapDown;
+
+  window.addEventListener("keydown", (e) => {
+    if (e.repeat) return;
+    if (e.key.toLowerCase() === "r") { resetRound(); return; }
+    const k = (e.key.length === 1 ? e.key : e.key).toLowerCase();
+    const map = keyMapDown[k];
+    if (map) {
+      const [who, what] = map.split(".");
+      input[who][what] = true;
+      // send my inputs over net
+      if (dc && dc.readyState === "open") {
+        const mine = (role === "host") ? "p1" : (role === "join") ? "p2" : null;
+        if (mine === who) p2pSend({ t:"inp", i: what, v: 1 });
       }
-    })();
-  </script>
+      e.preventDefault();
+    }
+  });
+  window.addEventListener("keyup", (e) => {
+    const k = (e.key.length === 1 ? e.key : e.key).toLowerCase();
+    const map = keyMapUp[k];
+    if (map) {
+      const [who, what] = map.split(".");
+      input[who][what] = false;
+      if (dc && dc.readyState === "open") {
+        const mine = (role === "host") ? "p1" : (role === "join") ? "p2" : null;
+        if (mine === who) p2pSend({ t:"inp", i: what, v: 0 });
+      }
+      e.preventDefault();
+    }
+  });
+
+  resetBtn.addEventListener("click", resetRound);
+  function resetRound() {
+    P1 = makePlayer(W*0.3); P1.facing = 1;
+    P2 = makePlayer(W*0.7); P2.facing = -1;
+  }
+
+  // ===== Multiplayer (manual signaling) =====
+  mpBtn.addEventListener("click", () => openP2P());
+  p2pClose.addEventListener("click", () => closeP2P());
+  p2pClose2.addEventListener("click", () => closeP2P());
+  tabHost.addEventListener("click", () => switchTab(true));
+  tabJoin.addEventListener("click", () => switchTab(false));
+  hostCreate.addEventListener("click", async () => {
+    resetP2P();
+    role = "host";
+    try {
+      pc = buildPC();
+      dc = pc.createDataChannel("sticks", { ordered:true });
+      attachDC(dc);
+      setState("creating offer…");
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      await waitIce(pc);
+      hostOffer.value = JSON.stringify(pc.localDescription);
+      setState("share the offer");
+    } catch (e) { setState("offer error", true); }
+  });
+  hostCopy.addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(hostOffer.value || ""); setState("offer copied"); } catch {}
+  });
+  hostAccept.addEventListener("click", async () => {
+    try {
+      const ans = JSON.parse((hostAnswer.value || "").trim());
+      await pc.setRemoteDescription(ans);
+      setState("waiting for datachannel…");
+    } catch { setState("invalid answer", true); }
+  });
+  hostReset.addEventListener("click", () => {
+    hostOffer.value = ""; hostAnswer.value = "";
+    resetP2P(); setState("idle");
+  });
+
+  joinAccept.addEventListener("click", async () => {
+    resetP2P();
+    role = "join";
+    try {
+      pc = buildPC();
+      pc.ondatachannel = (ev) => { dc = ev.channel; attachDC(dc); };
+      const off = JSON.parse((joinOffer.value || "").trim());
+      await pc.setRemoteDescription(off);
+      setState("creating answer…");
+      const ans = await pc.createAnswer();
+      await pc.setLocalDescription(ans);
+      await waitIce(pc);
+      joinAnswer.value = JSON.stringify(pc.localDescription);
+      setState("send answer to host");
+    } catch { setState("invalid offer", true); }
+  });
+  joinCopy.addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(joinAnswer.value || ""); setState("answer copied"); } catch {}
+  });
+  joinReset.addEventListener("click", () => {
+    joinOffer.value = ""; joinAnswer.value = "";
+    resetP2P(); setState("idle");
+  });
+
+  function openP2P() { p2pModal.setAttribute("open",""); p2pModal.setAttribute("aria-hidden","false"); }
+  function closeP2P() { p2pModal.removeAttribute("open"); p2pModal.setAttribute("aria-hidden","true"); }
+
+  function switchTab(isHost) {
+    tabHost.dataset.active = isHost ? "1":"0";
+    tabJoin.dataset.active = isHost ? "0":"1";
+    hostPane.style.display = isHost ? "" : "none";
+    joinPane.style.display = isHost ? "none" : "";
+  }
+
+  function buildPC() {
+    const cfg = lanOnly.checked ? { iceServers: [] } : { iceServers: [
+      { urls: ["stun:stun.l.google.com:19302","stun:global.stun.twilio.com:3478"] }
+    ]};
+    const peer = new RTCPeerConnection(cfg);
+    peer.onconnectionstatechange = () => {
+      const s = peer.connectionState;
+      p2pBadge.textContent = "P2P: " + s;
+      if (s === "connected") setState("connected", false, true);
+      if (s === "failed") setState("failed", true);
+      if (s === "disconnected" || s === "closed") setState("closed");
+    };
+    return peer;
+  }
+  function attachDC(channel) {
+    channel.onopen = () => { setState("channel open", false, true); p2pBadge.textContent = "P2P: connected"; };
+    channel.onclose = () => { setState("channel closed"); p2pBadge.textContent = "P2P: disconnected"; };
+    channel.onerror = () => { setState("channel error", true); };
+    channel.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(typeof ev.data === "string" ? ev.data : new TextDecoder().decode(ev.data));
+        handleMsg(msg);
+      } catch {}
+    };
+    // on connect, host sends authoritative state
+    if (role === "host") p2pSend({ t:"state", p1: packPlayer(P1), p2: packPlayer(P2) });
+  }
+  function setState(text, isErr=false, isOk=false) {
+    p2pState.textContent = text;
+    p2pState.className = "status" + (isErr ? " err" : isOk ? " ok" : "");
+  }
+  async function waitIce(peer) {
+    if (peer.iceGatheringState === "complete") return;
+    await new Promise(res => peer.addEventListener("icegatheringstatechange", () => {
+      if (peer.iceGatheringState === "complete") res();
+    }));
+  }
+  function resetP2P() {
+    if (dc) { try { dc.close(); } catch {} dc = null; }
+    if (pc) { try { pc.close(); } catch {} pc = null; }
+    role = null; p2pBadge.textContent = "P2P: disconnected";
+  }
+  function p2pSend(obj) {
+    if (!dc || dc.readyState !== "open") return;
+    try { dc.send(JSON.stringify(obj)); } catch {}
+  }
+  function handleMsg(msg) {
+    if (!msg || typeof msg !== "object") return;
+    if (msg.t === "inp") {
+      // remote input update goes into remoteInput
+      remoteInput[msg.i] = !!msg.v;
+    } else if (msg.t === "state") {
+      if (role === "join") {
+        unpackInto(P1, msg.p1);
+        unpackInto(P2, msg.p2);
+      }
+    }
+  }
+})();
+</script>
 </body>
 </html>
